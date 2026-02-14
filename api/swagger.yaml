@@ -1,0 +1,1148 @@
+info:
+  title: GophKeeper API
+  description: |
+    Secure password manager API with client-server architecture.
+    Allows users to store and synchronize login credentials, text data, binary data, and card information.
+  version: 1.0.0
+  contact:
+    name: GophKeeper Support
+    email: support@gophkeeper.com
+  license:
+    name: MIT
+    url: https://opensource.org/licenses/MIT
+
+servers:
+  - url: https://api.gophkeeper.com/v1
+    description: Production server
+  - url: https://staging-api.gophkeeper.com/v1
+    description: Staging server
+  - url: http://localhost:8080/v1
+    description: Development server
+
+tags:
+  - name: auth
+    description: Authentication and authorization operations
+  - name: items
+    description: CRUD operations for stored items
+  - name: sync
+    description: Data synchronization operations
+  - name: system
+    description: System health and version information
+
+paths:
+  /register:
+    post:
+      tags:
+        - auth
+      summary: Register a new user
+      description: Create a new user account with email and password
+      operationId: register
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/RegisterRequest"
+            examples:
+              basic:
+                summary: Basic registration
+                value:
+                  email: "user@example.com"
+                  password: "SecurePass123!"
+      responses:
+        "201":
+          description: User successfully registered
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/RegisterResponse"
+        "400":
+          description: Invalid request data
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "409":
+          description: User already exists
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /login:
+    post:
+      tags:
+        - auth
+      summary: Authenticate user
+      description: Authenticate user and receive JWT tokens
+      operationId: login
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/LoginRequest"
+      responses:
+        "200":
+          description: Authentication successful
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/LoginResponse"
+        "401":
+          description: Invalid credentials
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /refresh:
+    post:
+      tags:
+        - auth
+      summary: Refresh access token
+      description: Use refresh token to get new access token
+      operationId: refreshToken
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/RefreshTokenRequest"
+      responses:
+        "200":
+          description: Token successfully refreshed
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/RefreshTokenResponse"
+        "401":
+          description: Invalid or expired refresh token
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /password/change:
+    post:
+      tags:
+        - auth
+      summary: Change user password
+      description: Change the authenticated user's password
+      operationId: changePassword
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ChangePasswordRequest"
+      responses:
+        "200":
+          description: Password successfully changed
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ChangePasswordResponse"
+        "400":
+          description: Invalid current password or new password format
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "401":
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /items:
+    get:
+      tags:
+        - items
+      summary: List user items
+      description: Retrieve all items for the authenticated user with optional filtering
+      operationId: listItems
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: type
+          in: query
+          description: Filter by data type
+          schema:
+            type: string
+            enum: [password, text, binary, card]
+        - name: limit
+          in: query
+          description: Number of items to return
+          schema:
+            type: integer
+            default: 100
+            maximum: 1000
+        - name: offset
+          in: query
+          description: Number of items to skip
+          schema:
+            type: integer
+            default: 0
+            minimum: 0
+        - name: since
+          in: query
+          description: Return items updated after this timestamp
+          schema:
+            type: string
+            format: date-time
+        - name: until
+          in: query
+          description: Return items updated before this timestamp
+          schema:
+            type: string
+            format: date-time
+        - name: search
+          in: query
+          description: Search in meta fields
+          schema:
+            type: string
+            maxLength: 256
+        - name: sort_by
+          in: query
+          description: Sort field
+          schema:
+            type: string
+            enum: [created_at, updated_at, meta]
+            default: updated_at
+        - name: sort_order
+          in: query
+          description: Sort order
+          schema:
+            type: string
+            enum: [asc, desc]
+            default: desc
+      responses:
+        "200":
+          description: Items retrieved successfully
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ItemsListResponse"
+        "401":
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+    post:
+      tags:
+        - items
+      summary: Create new item
+      description: Create a new item with specified type and data
+      operationId: createItem
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateItemRequest"
+            examples:
+              password:
+                summary: Create password item
+                value:
+                  type: password
+                  meta: "GitHub"
+                  data:
+                    password:
+                      meta: "GitHub account"
+                      login: "myusername"
+                      password: "encrypted_password_here"
+              text:
+                summary: Create text item
+                value:
+                  type: text
+                  meta: "Important notes"
+                  data:
+                    text:
+                      meta: "Personal notes"
+                      data: "encrypted_text_data_here"
+              card:
+                summary: Create card item
+                value:
+                  type: card
+                  meta: "Personal Visa"
+                  data:
+                    card:
+                      meta: "Primary card"
+                      number: "1234567890123456"
+                      holder_name: "JOHN DOE"
+                      expiry_date: "12/25"
+                      cvv: "123"
+      responses:
+        "201":
+          description: Item created successfully
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ItemCreatedResponse"
+        "400":
+          description: Invalid request data
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "401":
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /items/{item_id}:
+    get:
+      tags:
+        - items
+      summary: Get specific item
+      description: Retrieve a specific item by ID
+      operationId: getItem
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: item_id
+          in: path
+          required: true
+          description: Item ID
+          schema:
+            type: string
+            format: uuid
+      responses:
+        "200":
+          description: Item retrieved successfully
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ItemResponse"
+        "401":
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "404":
+          description: Item not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+    put:
+      tags:
+        - items
+      summary: Update item
+      description: Update an existing item with optimistic locking
+      operationId: updateItem
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: item_id
+          in: path
+          required: true
+          description: Item ID
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UpdateItemRequest"
+      responses:
+        "200":
+          description: Item updated successfully
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ItemUpdatedResponse"
+        "400":
+          description: Invalid request data or version conflict
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "401":
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "404":
+          description: Item not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "409":
+          description: Version conflict
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+    delete:
+      tags:
+        - items
+      summary: Delete item
+      description: Soft delete an item
+      operationId: deleteItem
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: item_id
+          in: path
+          required: true
+          description: Item ID
+          schema:
+            type: string
+            format: uuid
+      responses:
+        "200":
+          description: Item deleted successfully
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ItemDeletedResponse"
+        "401":
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "404":
+          description: Item not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /sync:
+    post:
+      tags:
+        - sync
+      summary: Synchronize data
+      description: Synchronize client data with server, handling conflicts
+      operationId: sync
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/SyncRequest"
+      responses:
+        "200":
+          description: Sync completed successfully
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SyncResponse"
+        "400":
+          description: Invalid sync request
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "401":
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /sync/resolve-conflict:
+    post:
+      tags:
+        - sync
+      summary: Resolve sync conflict
+      description: Manually resolve a synchronization conflict
+      operationId: resolveConflict
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ResolveConflictRequest"
+      responses:
+        "200":
+          description: Conflict resolved successfully
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ItemResponse"
+        "400":
+          description: Invalid conflict resolution request
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "401":
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "404":
+          description: Item or conflict not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /version:
+    get:
+      tags:
+        - system
+      summary: Get API version
+      description: Retrieve version information and build details
+      operationId: getVersion
+      responses:
+        "200":
+          description: Version information
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/VersionResponse"
+
+  /health:
+    get:
+      tags:
+        - system
+      summary: Health check
+      description: Check system health and service status
+      operationId: healthCheck
+      responses:
+        "200":
+          description: System is healthy
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/HealthResponse"
+        "503":
+          description: System unhealthy
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+
+  schemas:
+    RegisterRequest:
+      type: object
+      required:
+        - email
+        - password
+      properties:
+        email:
+          type: string
+          format: email
+          minLength: 6
+          maxLength: 255
+          description: User email address
+          example: "user@example.com"
+        password:
+          type: string
+          minLength: 8
+          maxLength: 128
+          description: User password (will be hashed)
+          example: "SecurePass123!"
+
+    LoginRequest:
+      type: object
+      required:
+        - email
+        - password
+      properties:
+        email:
+          type: string
+          format: email
+          description: User email address
+          example: "user@example.com"
+        password:
+          type: string
+          description: User password
+          example: "SecurePass123!"
+
+    RefreshTokenRequest:
+      type: object
+      required:
+        - refresh_token
+      properties:
+        refresh_token:
+          type: string
+          description: Refresh token obtained from login
+          example: "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9..."
+
+    ChangePasswordRequest:
+      type: object
+      required:
+        - current_password
+        - new_password
+      properties:
+        current_password:
+          type: string
+          description: Current password
+          example: "OldPass123!"
+        new_password:
+          type: string
+          minLength: 8
+          maxLength: 128
+          description: New password
+          example: "NewPass456!"
+
+    CreateItemRequest:
+      type: object
+      required:
+        - type
+        - data
+      properties:
+        type:
+          type: string
+          enum: [password, text, binary, card]
+          description: Type of data to store
+        meta:
+          type: string
+          maxLength: 256
+          description: Optional metadata about the item
+          example: "GitHub account"
+        data:
+          $ref: "#/components/schemas/ItemData"
+
+    UpdateItemRequest:
+      type: object
+      required:
+        - version
+      properties:
+        version:
+          type: integer
+          minimum: 1
+          description: Item version for optimistic locking
+        meta:
+          type: string
+          maxLength: 256
+          description: Updated metadata
+        data:
+          $ref: "#/components/schemas/ItemData"
+
+    ItemData:
+      type: object
+      description: Type-specific item data (only one property should be set)
+      properties:
+        password:
+          $ref: "#/components/schemas/PasswordData"
+        text:
+          $ref: "#/components/schemas/TextData"
+        binary:
+          $ref: "#/components/schemas/BinaryData"
+        card:
+          $ref: "#/components/schemas/CardData"
+
+    PasswordData:
+      type: object
+      required:
+        - login
+        - password
+      properties:
+        meta:
+          type: string
+          maxLength: 256
+          description: Optional metadata
+          example: "GitHub account"
+        login:
+          type: string
+          minLength: 3
+          maxLength: 128
+          description: Username or email for the service
+          example: "myusername"
+        password:
+          type: string
+          description: Encrypted password
+          example: "encrypted_password_here"
+
+    TextData:
+      type: object
+      required:
+        - data
+      properties:
+        meta:
+          type: string
+          maxLength: 256
+          description: Optional metadata
+          example: "Important notes"
+        data:
+          type: string
+          maxLength: 1048576
+          description: Encrypted text content (max 1MB)
+          example: "encrypted_text_data_here"
+
+    BinaryData:
+      type: object
+      required:
+        - filename
+        - data
+      properties:
+        meta:
+          type: string
+          maxLength: 256
+          description: Optional metadata
+          example: "Document backup"
+        filename:
+          type: string
+          minLength: 1
+          maxLength: 255
+          description: Original filename
+          example: "document.pdf"
+        data:
+          type: string
+          format: byte
+          description: Encrypted binary data (max 10MB)
+
+    CardData:
+      type: object
+      required:
+        - number
+        - holder_name
+        - expiry_date
+        - cvv
+      properties:
+        meta:
+          type: string
+          maxLength: 256
+          description: Optional metadata
+          example: "Personal Visa"
+        number:
+          type: string
+          pattern: '^\d{16}$'
+          description: Encrypted 16-digit card number
+          example: "1234567890123456"
+        holder_name:
+          type: string
+          minLength: 2
+          maxLength: 64
+          description: Encrypted cardholder name
+          example: "JOHN DOE"
+        expiry_date:
+          type: string
+          pattern: '^(0[1-9]|1[0-2])/\d{2}$'
+          description: Encrypted expiry date in MM/YY format
+          example: "12/25"
+        cvv:
+          type: string
+          pattern: '^\d{3}$'
+          description: Encrypted 3-digit CVV
+          example: "123"
+
+    SyncRequest:
+      type: object
+      required:
+        - items
+      properties:
+        last_sync_at:
+          type: string
+          format: date-time
+          description: Timestamp of last successful sync
+        items:
+          type: array
+          description: Items to sync from client
+          items:
+            $ref: "#/components/schemas/SyncItem"
+
+    SyncItem:
+      type: object
+      required:
+        - id
+        - type
+        - version
+        - created_at
+        - updated_at
+        - data
+      properties:
+        id:
+          type: string
+          format: uuid
+          description: Unique item identifier
+        type:
+          type: string
+          enum: [password, text, binary, card]
+        version:
+          type: integer
+          minimum: 0
+          description: Item version number
+        created_at:
+          type: string
+          format: date-time
+          description: Item creation timestamp
+        updated_at:
+          type: string
+          format: date-time
+          description: Last update timestamp
+        deleted_at:
+          type: string
+          format: date-time
+          nullable: true
+          description: Soft delete timestamp if item was deleted
+        meta:
+          type: string
+          maxLength: 256
+          description: Item metadata
+        data:
+          $ref: "#/components/schemas/ItemData"
+
+    ResolveConflictRequest:
+      type: object
+      required:
+        - item_id
+        - resolution
+      properties:
+        item_id:
+          type: string
+          format: uuid
+          description: ID of the conflicting item
+        resolution:
+          type: string
+          enum: [local, server, merge]
+          description: How to resolve the conflict
+        data:
+          $ref: "#/components/schemas/ItemData"
+          description: Custom data when resolution is 'merge'
+
+    RegisterResponse:
+      type: object
+      properties:
+        user_id:
+          type: string
+          format: uuid
+          example: "550e8400-e29b-41d4-a716-446655440000"
+        email:
+          type: string
+          format: email
+          example: "user@example.com"
+        created_at:
+          type: string
+          format: date-time
+          example: "2024-01-15T10:30:00Z"
+
+    LoginResponse:
+      type: object
+      properties:
+        access_token:
+          type: string
+          description: JWT access token
+          example: "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9..."
+        refresh_token:
+          type: string
+          description: JWT refresh token
+          example: "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9..."
+        expires_at:
+          type: string
+          format: date-time
+          description: Access token expiration time
+          example: "2024-01-16T10:30:00Z"
+        user:
+          $ref: "#/components/schemas/UserSummary"
+
+    RefreshTokenResponse:
+      type: object
+      properties:
+        access_token:
+          type: string
+          description: New JWT access token
+        refresh_token:
+          type: string
+          description: New JWT refresh token
+        expires_at:
+          type: string
+          format: date-time
+          description: New access token expiration time
+
+    ChangePasswordResponse:
+      type: object
+      properties:
+        updated_at:
+          type: string
+          format: date-time
+          description: Timestamp of password change
+
+    UserSummary:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+          example: "550e8400-e29b-41d4-a716-446655440000"
+        email:
+          type: string
+          format: email
+          example: "user@example.com"
+        created_at:
+          type: string
+          format: date-time
+          example: "2024-01-15T10:30:00Z"
+
+    ItemResponse:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        type:
+          type: string
+          enum: [password, text, binary, card]
+        version:
+          type: integer
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
+        data:
+          $ref: "#/components/schemas/ItemData"
+
+    ItemsListResponse:
+      type: object
+      properties:
+        items:
+          type: array
+          items:
+            $ref: "#/components/schemas/ItemResponse"
+        total:
+          type: integer
+          description: Total number of items matching the query
+          example: 42
+        limit:
+          type: integer
+          example: 100
+        offset:
+          type: integer
+          example: 0
+        has_more:
+          type: boolean
+          description: Whether there are more items available
+          example: false
+        last_sync_at:
+          type: string
+          format: date-time
+          nullable: true
+          description: Last sync timestamp for the user
+
+    SyncResponse:
+      type: object
+      properties:
+        server_items:
+          type: array
+          description: Items from server (new or updated)
+          items:
+            $ref: "#/components/schemas/ItemResponse"
+        conflicts:
+          type: array
+          description: Items with version conflicts
+          items:
+            $ref: "#/components/schemas/ConflictInfo"
+        last_sync_at:
+          type: string
+          format: date-time
+          description: Timestamp of this sync operation
+        synced_count:
+          type: integer
+          description: Number of items successfully synced
+          example: 15
+        conflict_count:
+          type: integer
+          description: Number of conflicts detected
+          example: 2
+
+    ConflictInfo:
+      type: object
+      properties:
+        item_id:
+          type: string
+          format: uuid
+        item_type:
+          type: string
+          enum: [password, text, binary, card]
+        local_version:
+          type: integer
+        server_version:
+          type: integer
+        local_data:
+          description: Client's version of the data
+        server_data:
+          description: Server's version of the data
+        resolution_hint:
+          type: string
+          description: Hint on how to resolve the conflict
+
+    ItemCreatedResponse:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        type:
+          type: string
+          enum: [password, text, binary, card]
+        version:
+          type: integer
+          example: 1
+        created_at:
+          type: string
+          format: date-time
+
+    ItemUpdatedResponse:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        type:
+          type: string
+          enum: [password, text, binary, card]
+        version:
+          type: integer
+          example: 2
+        updated_at:
+          type: string
+          format: date-time
+
+    ItemDeletedResponse:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        deleted_at:
+          type: string
+          format: date-time
+
+    VersionResponse:
+      type: object
+      properties:
+        version:
+          type: string
+          description: API version
+          example: "1.0.0"
+        build_date:
+          type: string
+          format: date-time
+          description: Build timestamp
+          example: "2024-01-15T10:00:00Z"
+        git_commit:
+          type: string
+          description: Git commit hash
+          example: "abc123def456"
+        go_version:
+          type: string
+          description: Go version used for build
+          example: "go1.25.7"
+        platform:
+          type: string
+          description: Build platform
+          example: "linux/amd64"
+        api_version:
+          type: string
+          description: API version
+          example: "v1"
+        features:
+          type: array
+          description: List of enabled features
+          items:
+            type: string
+          example: ["encryption", "sync", "otp"]
+
+    HealthResponse:
+      type: object
+      properties:
+        status:
+          type: string
+          enum: [healthy, unhealthy]
+          example: "healthy"
+        timestamp:
+          type: string
+          format: date-time
+          example: "2024-01-15T10:30:00Z"
+        services:
+          type: object
+          additionalProperties:
+            type: string
+          description: Status of various services
+          example:
+            database: "healthy"
+            cache: "healthy"
+        database:
+          $ref: "#/components/schemas/DatabaseStatus"
+        uptime:
+          type: string
+          description: Server uptime
+          example: "5d 3h 45m"
+
+    DatabaseStatus:
+      type: object
+      properties:
+        status:
+          type: string
+          enum: [healthy, unhealthy]
+          example: "healthy"
+        latency:
+          type: string
+          description: Database query latency
+          example: "5ms"
+        connected:
+          type: boolean
+          example: true
+
+    ErrorResponse:
+      type: object
+      properties:
+        error:
+          $ref: "#/components/schemas/ErrorDetail"
+        timestamp:
+          type: string
+          format: date-time
+          example: "2024-01-15T10:30:00Z"
+        path:
+          type: string
+          description: Request path
+          example: "/api/v1/items"
+
+    ErrorDetail:
+      type: object
+      required:
+        - code
+        - message
+      properties:
+        code:
+          type: string
+          description: Error code
+          example: "VALIDATION_FAILED"
+        message:
+          type: string
+          description: Human-readable error message
+          example: "Email is required"
+        field:
+          type: string
+          description: Field that caused the error (if applicable)
+          example: "email"
+        details:
+          type: string
+          description: Additional error details

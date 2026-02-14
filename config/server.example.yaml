@@ -1,0 +1,64 @@
+# GophKeeper Server Configuration
+
+# Server settings
+server:
+  address: ":8080"
+  read_timeout: 15s
+  write_timeout: 15s
+  idle_timeout: 60s
+  shutdown_timeout: 30s
+  max_header_bytes: 1048576  # 1MB
+  enable_cors: true
+  enable_metrics: true
+  enable_profiling: false
+  trusted_proxies:
+    - "127.0.0.1"
+    - "::1"
+
+# Database settings
+database:
+  driver: "postgres"
+  dsn: "postgres://gophkeeper:gophkeeper@localhost:5432/gophkeeper?sslmode=disable"
+  max_open_conns: 25
+  max_idle_conns: 5
+  conn_max_lifetime: 5m
+  conn_max_idle_time: 5m
+  enable_ssl: false
+  ssl_cert_path: ""
+  ssl_key_path: ""
+  ssl_mode: "disable"
+
+# Authentication settings
+auth:
+  jwt_secret: "change-this-secret-in-production-please"
+  jwt_issuer: "gophkeeper"
+  jwt_audience: "gophkeeper-users"
+  access_token_duration: 24h
+  refresh_token_duration: 720h  # 30 days
+  enable_refresh: true
+  password_cost: 12
+  token_header: "Authorization"
+  token_cookie: false
+  cookie_secure: true
+  cookie_http_only: true
+  cookie_same_site: "Strict"
+
+# Encryption settings
+encryption:
+  algorithm: "chacha20-poly1305"
+  key_derivation: "argon2id"
+  key_iterations: 3
+  salt_length: 16
+  nonce_length: 12
+
+# Logging settings
+logging:
+  level: "info"
+  format: "json"
+  output: "stdout"
+  enable_caller: true
+  enable_stacktrace: false
+  max_size: 100
+  max_backups: 3
+  max_age: 7
+  compress: true
