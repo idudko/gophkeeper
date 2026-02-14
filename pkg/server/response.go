@@ -21,8 +21,12 @@ func RespondJSON(w http.ResponseWriter, status int, data interface{}) {
 	encoder.SetEscapeHTML(false)
 
 	if err := encoder.Encode(data); err != nil {
-		// If encoding fails, try to send plain text error
-		http.Error(w, "Failed to encode response", http.StatusInternalServerError)
+		// Log the internal error for debugging
+		logger.Error("failed to encode JSON response",
+			logger.Err(err),
+		)
+		// Send generic error message to client (no internal details exposed)
+		http.Error(w, "Internal server error", http.StatusInternalServerError)
 	}
 }
 
@@ -49,7 +53,10 @@ func RespondError(w http.ResponseWriter, status int, message, code string, log l
 	}
 
 	if err := json.NewEncoder(w).Encode(response); err != nil {
-		http.Error(w, message, status)
+		log.Error("failed to encode error response",
+			logger.Err(err),
+		)
+		http.Error(w, "Internal server error", http.StatusInternalServerError)
 	}
 }
 
@@ -311,7 +318,7 @@ func (rb *ResponseBuilder) Build() {
 			logger.Err(err),
 			logger.String("status", fmt.Sprintf("%d", rb.status)),
 		)
-		http.Error(rb.writer, "Failed to encode response", http.StatusInternalServerError)
+		http.Error(rb.writer, "Internal server error", http.StatusInternalServerError)
 		return
 	}
 

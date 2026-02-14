@@ -77,7 +77,7 @@ func NewPostgresStorage(ctx context.Context, cfg *Config) (*PostgresStorage, err
 	}
 
 	// Test connection with retry logic
-	if err := retryOperation(ctx, 3, func() error {
+	if err := withRetry(ctx, 3, func() error {
 		return pool.Ping(ctx)
 	}); err != nil {
 		pool.Close()
@@ -87,30 +87,87 @@ func NewPostgresStorage(ctx context.Context, cfg *Config) (*PostgresStorage, err
 	return &PostgresStorage{pool: pool}, nil
 }
 
-// retryOperation executes a function with retry logic.
-func retryOperation(ctx context.Context, maxRetries int, fn func() error) error {
+// withRetry executes a function with retry logic for non-transactional operations.
+func withRetry(ctx context.Context, maxRetries int, fn func() error) error {
 	var lastErr error
 	for i := range maxRetries {
 		if err := fn(); err != nil {
 			lastErr = err
-			// Check if error is retryable
-			var pgErr *pgconn.PgError
-			if errors.As(err, &pgErr) {
-				// Connection errors are retryable
-				if isConnectionError(pgErr.Code) {
-					time.Sleep(time.Duration(i+1) * time.Second)
-					continue
-				}
+			if isRetryableError(err) {
+				time.Sleep(time.Duration(i+1) * time.Second)
+				continue
 			}
-			// Context cancellation is not retryable
-			if errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) {
-				return err
-			}
-		} else {
-			return nil
+			return err
 		}
+		return nil
 	}
 	return lastErr
+}
+
+// withRetryTx executes a function within a transaction with retry logic.
+// If the function returns a retryable error, the transaction is rolled back
+// and a new transaction is started for the next attempt.
+func (s *PostgresStorage) withRetryTx(ctx context.Context, maxRetries int, fn func(pgx.Tx) error) error {
+	var lastErr error
+	for i := range maxRetries {
+		// Start a new transaction for each attempt
+		tx, err := s.pool.Begin(ctx)
+		if err != nil {
+			lastErr = err
+			// Check if error is retryable
+			if isRetryableError(err) {
+				time.Sleep(time.Duration(i+1) * time.Second)
+				continue
+			}
+			return err
+		}
+
+		// Execute the function within the transaction
+		err = fn(tx)
+		if err != nil {
+			// Rollback the transaction
+			_ = tx.Rollback(ctx)
+
+			lastErr = err
+			// Check if error is retryable
+			if isRetryableError(err) {
+				time.Sleep(time.Duration(i+1) * time.Second)
+				continue
+			}
+			return err
+		}
+
+		// Commit the transaction
+		err = tx.Commit(ctx)
+		if err != nil {
+			lastErr = err
+			// Check if error is retryable
+			if isRetryableError(err) {
+				time.Sleep(time.Duration(i+1) * time.Second)
+				continue
+			}
+			return err
+		}
+
+		return nil
+	}
+	return lastErr
+}
+
+// isRetryableError checks if an error is retryable.
+func isRetryableError(err error) bool {
+	// Check for PostgreSQL connection errors
+	var pgErr *pgconn.PgError
+	if errors.As(err, &pgErr) {
+		return isConnectionError(pgErr.Code)
+	}
+
+	// Context cancellation is not retryable
+	if errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) {
+		return false
+	}
+
+	return false
 }
 
 // isConnectionError checks if a PostgreSQL error code indicates a connection issue.
@@ -138,7 +195,7 @@ func (s *PostgresStorage) Close() error {
 
 // Ping checks if the database connection is alive with retry logic.
 func (s *PostgresStorage) Ping(ctx context.Context) error {
-	return retryOperation(ctx, 3, func() error {
+	return withRetry(ctx, 3, func() error {
 		return s.pool.Ping(ctx)
 	})
 }

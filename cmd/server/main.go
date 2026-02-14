@@ -197,22 +197,20 @@ func main() {
 		errChan <- srv.ListenAndServe()
 	}()
 
-	// Wait for interrupt signal
-	sigChan := make(chan os.Signal, 1)
-	signal.Notify(sigChan, os.Interrupt, syscall.SIGTERM, syscall.SIGINT)
+	// Create context that is cancelled on interrupt signal
+	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM, syscall.SIGINT)
+	defer stop()
 
 	// Wait for either server error or interrupt signal
 	select {
 	case err := <-errChan:
 		if err != nil && err != http.ErrServerClosed {
-			lgr.Fatal("Server failed to start",
+			lgr.Error("Server failed to start",
 				logger.Err(err),
 			)
 		}
-	case sig := <-sigChan:
-		lgr.Info("Received shutdown signal",
-			logger.String("signal", sig.String()),
-		)
+	case <-ctx.Done():
+		lgr.Info("Received shutdown signal")
 	}
 
 	// Graceful shutdown
